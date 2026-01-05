@@ -16,8 +16,33 @@ from torch import nn
 import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as transforms
-import torchtext
-import torchtext.vocab as Vocab
+# torchtext may fail to import on some Windows setups due to C++ extension
+# loading errors. Import it defensively and provide a lightweight fallback
+# `torchtext.vocab.Vocab` so code that references it won't crash at import time.
+try:
+    import torchtext
+    import torchtext.vocab as Vocab
+except Exception:
+    torchtext = None
+    class _FallbackVocab:
+        def __init__(self, counter=None, min_freq=0):
+            # Build a minimal stoi/itos from the provided counter honoring min_freq.
+            self.itos = []
+            self.stoi = {}
+            if counter is not None:
+                items = [w for w, c in counter.items() if c >= min_freq]
+                # keep deterministic ordering
+                items.sort()
+                self.itos = items
+                self.stoi = {w: i for i, w in enumerate(self.itos)}
+            # No pretrained vectors available in fallback
+            self.vectors = []
+    class _vocab_module:
+        Vocab = _FallbackVocab
+    # expose the fallback both as `Vocab` and `torchtext.vocab`
+    Vocab = _vocab_module
+    torchtext = type('torchtext', (), {})()
+    torchtext.vocab = _vocab_module
 import numpy as np
 
 
